@@ -1,9 +1,10 @@
-(defproject lurodrigo/ratelimiter "0.1.1"
+(defproject lurodrigo/ratelimiter "0.1.1-SNAPSHOT"
   :description "Clojure wrapper for Resilience4j's Rate Limiter."
   :url "http:/github.com/lurodrigo/ratelimiter"
   :license {:name "MIT License"
             :url  "https://raw.githubusercontent.com/lurodrigo/ratelimiter/master/LICENSE"}
-  :repositories [["clojars" {:url "https://clojars.org/repo/" :creds :gpg}]]
+  :deploy-repositories [["releases" :clojars]
+                        ["snapshots" :clojars]]
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [io.github.resilience4j/resilience4j-ratelimiter "1.5.0"]]
   :profiles {:test [lambdaisland/kaocha "1.0.641"]}
