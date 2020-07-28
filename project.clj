@@ -1,4 +1,4 @@
-(defproject lurodrigo/ratelimiter "0.1.2-SNAPSHOT"
+(defproject lurodrigo/ratelimiter "0.1.2"
   :description "Clojure wrapper for Resilience4j's Rate Limiter."
   :url "http:/github.com/lurodrigo/ratelimiter"
   :license {:name "MIT License"
