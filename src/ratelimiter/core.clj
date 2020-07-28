@@ -1,4 +1,4 @@
-(ns rate-limiter.core
+(ns ratelimiter.core
   (:import
     (io.github.resilience4j.ratelimiter RateLimiter
                                         RateLimiterConfig
@@ -69,7 +69,7 @@
      (let [callable           (reify Callable (call [_] (apply f args)))
            decorated-callable (if permits
                                 (RateLimiter/decorateCallable breaker permits callable)
-                                (RateLimiter/decorateCallable breaker 1 callable))
+                                (RateLimiter/decorateCallable breaker callable))
            failure-handler    (get-failure-handler opts)
            result             (Try/ofCallable decorated-callable)]
        (if (.isSuccess result)
@@ -111,4 +111,5 @@
   (def rl (create "rl1" {:limit-for-period 10
                          :limit-refresh-period 10000}))
   (def df (decorate f rl))
+  (metrics rl)
   )
