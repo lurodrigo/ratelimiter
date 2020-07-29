@@ -220,7 +220,7 @@ The signature of the fallback function is the same as the original function plus
 
 When considering fallback strategies there are usually three major strategies:
 
-1. **Failure**: the default way for Resilience4clj - just let the exceptiohn flow - is called a "Fail Fast" approach (the call will fail fast once the breaker is open). Another approach is "Fail Silently". In this approach the fallback function would simply hide the exception from the consumer (something that can also be done conditionally).
+1. **Failure**: the default way for Resilience4clj - just let the exception flow - is called a "Fail Fast" approach (the call will fail fast once there are no permits left). Another approach is "Fail Silently". In this approach the fallback function would simply hide the exception from the consumer (something that can also be done conditionally).
 
 2. **Content Fallback**: some of the examples of content fallback are returning "static content" (where a failure would always yield the same static content), "stubbed content" (where a failure would yield some kind of related content based on the paramaters of the call), or "cached" (where a cached copy of a previous call with the same parameters could be sent back).
 
