@@ -169,7 +169,62 @@ creation. Currently, it's possible to change `limit-for-period` and `timeout-dur
 
 ## Fallback Strategies
 
-TODO
+When decorating your function with a rate limiter you can opt to have a fallback function. This function 
+will be called instead of an exception being thrown when the call would fail (its traditional throw). 
+This feature can be seen as an obfuscation of a try/catch to consumers.
+
+```clojure
+(def rate-limiter (create "my-ratelimiter" {:limit-for-period     10
+                                            :limit-refresh-period 1000
+                                            :timeout-duration     0})) ; 10 reqs/sec, no waiting
+
+(def last-price (atom 10000))
+
+(defn call-external-service
+  "Flutuates between 99.99% and 100.01% of the last price."
+  []
+  (* @last-price (+ 0.9999 (rand 0.0002))))
+
+(defn get-price 
+  []
+  (let [price (call-external-service)]
+    (reset! last-price price)
+    price))
+
+(def limited-get-price (decorate get-price rate-limiter {:fallback (fn [e]
+                                                                      @last-price)}))
+
+(dotimes [i 15]
+  (printf "call %2d: %.2f\n" i (limited-get-price)))
+
+; output (the last five calls just repeat the last price available:
+; call  0: 10000.64
+; call  1: 10001.41
+; call  2: 10001.75
+; call  3: 10001.17
+; call  4: 10001.64
+; call  5: 10000.98
+; call  6: 10001.11
+; call  7: 10000.74
+; call  8: 9999.75
+; call  9: 10000.04
+; call 10: 10000.04
+; call 11: 10000.04
+; call 12: 10000.04
+; call 13: 10000.04
+; call 14: 10000.04
+```
+
+The signature of the fallback function is the same as the original function plus an exception as the
+ first argument (e on the example above). This exception is an ExceptionInfo wrapping around the real cause of the error. You can inspect the :cause node of this exception to learn about the inner exception:
+
+When considering fallback strategies there are usually three major strategies:
+
+1. **Failure**: the default way for Resilience4clj - just let the exceptiohn flow - is called a "Fail Fast" approach (the call will fail fast once the breaker is open). Another approach is "Fail Silently". In this approach the fallback function would simply hide the exception from the consumer (something that can also be done conditionally).
+
+2. **Content Fallback**: some of the examples of content fallback are returning "static content" (where a failure would always yield the same static content), "stubbed content" (where a failure would yield some kind of related content based on the paramaters of the call), or "cached" (where a cached copy of a previous call with the same parameters could be sent back).
+
+3. **Advanced**: multiple strategies can also be combined in order to create even better fallback strategies.
 
 ## Effects
 

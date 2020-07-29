@@ -109,7 +109,7 @@
 
   (def rate-limiter (create "my-ratelimiter" {:limit-for-period     3
                                               :limit-refresh-period 3000
-                                              :timeout-duration     4000}))
+                                              :timeout-duration     3000}))
 
   (defn my-print
     [msg]
@@ -120,6 +120,7 @@
   (doseq [x ["A" "B" "C" "D" "E" "F" "G" "H" "I"]]
     (dprint x))
 
+  ; parallel example
   (import io.github.resilience4j.ratelimiter.RequestNotPermitted)
 
   (doseq [x ["A" "B" "C" "D" "E" "F" "G" "H" "I"]]
@@ -128,6 +129,32 @@
         (dprint x)
         (catch RequestNotPermitted e
           (my-print (.getMessage e))))))
+
+  (def last-price (atom 10000))
+
+  ; fallback example
+
+  (def rate-limiter (create "my-ratelimiter" {:limit-for-period     10
+                                              :limit-refresh-period 1000
+                                              :timeout-duration     0}))
+
+  (def last-price (atom 10000))
+
+  (defn call-external-service
+    "Flutuates between 99.99% and 100.01% of the last price."
+    []
+    (* @last-price (+ 0.9999 (rand 0.0002))))
+
+  (defn get-price []
+    (let [price (call-external-service)]
+      (reset! last-price price)
+      price))
+
+  (def get-price (decorate get-price rate-limiter {:fallback (fn [e]
+                                                               @last-price)}))
+
+  (dotimes [i 15]
+    (printf "call %2d: %.2f\n" i (get-price)))
 
   ; TODO study the differences between the implementation of print and println
 
