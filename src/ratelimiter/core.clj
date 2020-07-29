@@ -14,7 +14,8 @@
 
     (io.vavr.control Try)
 
-    (java.time Duration)))
+    (java.time Duration)
+    (io.github.resilience4j.ratelimiter.internal SemaphoreBasedRateLimiter)))
 
 (defn ^:private get-failure-handler [{:keys [fallback]}]
   (if fallback
@@ -64,7 +65,7 @@
 (defn decorate
   ([f ^RateLimiter breaker]
    (decorate f breaker nil))
-  ([f ^RateLimiter breaker {:keys [effect permits] :as opts}]
+  ([f ^RateLimiter breaker {:keys [effect permits semaphore-based?] :as opts}]
    (fn [& args]
      (let [callable           (reify Callable (call [_] (apply f args)))
            decorated-callable (if permits
@@ -105,11 +106,31 @@
     (.changeTimeoutDuration r timeout-duration)))
 
 (comment
-  (defn f [] (do
-               (println "oi")
-               1))
-  (def rl (create "rl1" {:limit-for-period 10
-                         :limit-refresh-period 10000}))
-  (def df (decorate f rl))
-  (metrics rl)
+
+  (def rate-limiter (create "my-ratelimiter" {:limit-for-period     3
+                                              :limit-refresh-period 3000
+                                              :timeout-duration     4000}))
+
+  (defn my-print
+    [msg]
+    (println (str "At " (java.time.LocalDateTime/now) ": " msg "\n")))
+
+  (def dprint (decorate my-print rate-limiter))
+
+  (doseq [x ["A" "B" "C" "D" "E" "F" "G" "H" "I"]]
+    (dprint x))
+
+  (import io.github.resilience4j.ratelimiter.RequestNotPermitted)
+
+  (doseq [x ["A" "B" "C" "D" "E" "F" "G" "H" "I"]]
+    (future
+      (try
+        (dprint x)
+        (catch RequestNotPermitted e
+          (my-print (.getMessage e))))))
+
+  ; TODO study the differences between the implementation of print and println
+
+  (metrics rate-limiter)
+
   )
