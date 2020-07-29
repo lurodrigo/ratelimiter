@@ -65,7 +65,7 @@
 (defn decorate
   ([f ^RateLimiter breaker]
    (decorate f breaker nil))
-  ([f ^RateLimiter breaker {:keys [effect permits semaphore-based?] :as opts}]
+  ([f ^RateLimiter breaker {:keys [effect permits] :as opts}]
    (fn [& args]
      (let [callable           (reify Callable (call [_] (apply f args)))
            decorated-callable (if permits
@@ -75,9 +75,9 @@
            result             (Try/ofCallable decorated-callable)]
        (if (.isSuccess result)
          (let [out (.get result)]
-           (if effect
-             (future (apply effect (conj args out)))
-             out))
+           (when effect
+             (future (apply effect (conj args out))))
+           out)
          (let [args' (-> args (conj {:cause (.getCause result)}))]
            (apply failure-handler args')))))))
 
@@ -132,26 +132,23 @@
 
   (def last-price (atom 10000))
 
-  ; fallback example
+  ; fallback & effect example
 
   (def rate-limiter (create "my-ratelimiter" {:limit-for-period     10
                                               :limit-refresh-period 1000
                                               :timeout-duration     0}))
 
-  (def last-price (atom 10000))
-
-  (defn call-external-service
-    "Flutuates between 99.99% and 100.01% of the last price."
-    []
-    (* @last-price (+ 0.9999 (rand 0.0002))))
+  (def last-price-server (atom 10000))
 
   (defn get-price []
-    (let [price (call-external-service)]
-      (reset! last-price price)
-      price))
+    (swap! last-price-server * (+ 0.9999 (rand 0.0002))))
+
+  (def last-price-client (atom nil))
 
   (def get-price (decorate get-price rate-limiter {:fallback (fn [e]
-                                                               @last-price)}))
+                                                               @last-price-client)
+                                                   :effect (fn [ret & args]
+                                                             (reset! last-price-client ret))}))
 
   (dotimes [i 15]
     (printf "call %2d: %.2f\n" i (get-price)))

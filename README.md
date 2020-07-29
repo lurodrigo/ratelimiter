@@ -6,6 +6,7 @@
 [license]: ./LICENSE
 [resilience4clj]: https://github.com/resilience4clj
 [upstream-docs]: https://resilience4j.readme.io/docs/ratelimiter
+[cache-effect]: https://github.com/resilience4clj/resilience4clj-cache#using-as-an-effect
 
 # Rate Limiter
 
@@ -39,7 +40,7 @@ Require the library:
 Then create a rate limiter calling the function `create`:
 
 ``` clojure
-(def rate-limiter (create "my-ratelimiter" {:limit-for-period     3
+(def rate-limiter (r/create "my-ratelimiter" {:limit-for-period     3
                                             :limit-refresh-period 3000
                                             :timeout-duration     4000}))
 ```
@@ -52,7 +53,7 @@ defined.
   [msg]
   (println (str "At " (java.time.LocalDateTime/now) ": " msg "\n")))
 
-(def dprint (decorate my-print rate-limiter))
+(def dprint (r/decorate my-print rate-limiter))
 ```
 
 According to the [upstream docs][upstream-docs]:
@@ -173,46 +174,19 @@ When decorating your function with a rate limiter you can opt to have a fallback
 will be called instead of an exception being thrown when the call would fail (its traditional throw). 
 This feature can be seen as an obfuscation of a try/catch to consumers.
 
+This is particularly useful if you want to obfuscate from consumers that the retry and/or that the external dependency failed. Example:
+
 ```clojure
-(def rate-limiter (create "my-ratelimiter" {:limit-for-period     10
-                                            :limit-refresh-period 1000
-                                            :timeout-duration     0})) ; 10 reqs/sec, no waiting
+(def rate-limiter (r/create "hello-service-rate-limiter"))
 
-(def last-price (atom 10000))
+(defn hello [person]
+  ;; hypothetical flaky, external HTTP request
+  (str "Hello " person))
 
-(defn call-external-service
-  "Flutuates between 99.99% and 100.01% of the last price."
-  []
-  (* @last-price (+ 0.9999 (rand 0.0002))))
-
-(defn get-price 
-  []
-  (let [price (call-external-service)]
-    (reset! last-price price)
-    price))
-
-(def limited-get-price (decorate get-price rate-limiter {:fallback (fn [e]
-                                                                      @last-price)}))
-
-(dotimes [i 15]
-  (printf "call %2d: %.2f\n" i (limited-get-price)))
-
-; output (the last five calls just repeat the last price available:
-; call  0: 10000.64
-; call  1: 10001.41
-; call  2: 10001.75
-; call  3: 10001.17
-; call  4: 10001.64
-; call  5: 10000.98
-; call  6: 10001.11
-; call  7: 10000.74
-; call  8: 9999.75
-; call  9: 10000.04
-; call 10: 10000.04
-; call 11: 10000.04
-; call 12: 10000.04
-; call 13: 10000.04
-; call 14: 10000.04
+(def limited-hello
+  (r/decorate hello rate-limiter
+              {:fallback (fn [e person]
+                           (str "Hello from fallback to " person))}))
 ```
 
 The signature of the fallback function is the same as the original function plus an exception as the
@@ -222,13 +196,37 @@ When considering fallback strategies there are usually three major strategies:
 
 1. **Failure**: the default way for Resilience4clj - just let the exception flow - is called a "Fail Fast" approach (the call will fail fast once there are no permits left). Another approach is "Fail Silently". In this approach the fallback function would simply hide the exception from the consumer (something that can also be done conditionally).
 
-2. **Content Fallback**: some of the examples of content fallback are returning "static content" (where a failure would always yield the same static content), "stubbed content" (where a failure would yield some kind of related content based on the paramaters of the call), or "cached" (where a cached copy of a previous call with the same parameters could be sent back).
+2. **Content Fallback**: some examples of content fallback are returning "static content" (where a failure would always yield the same static content), "stubbed content" (where a failure would yield some kind of related content based on the paramaters of the call), or "cached" (where a cached copy of a previous call with the same parameters could be sent back).
 
 3. **Advanced**: multiple strategies can also be combined in order to create even better fallback strategies.
 
 ## Effects
 
-TODO
+A common issue for some fallback strategies is to rely on a cache or other content source (see Content Fallback above). 
+In these cases, it is good practice to persist the successful output of the function call as a side-effect of the call itself.
+
+Resilience4clj retry supports this behavior in the following way:
+
+The signature of the effect function is the same as the original function plus a "return" argument as the first argument (ret on the example above). This argument is the successful return of the encapsulated function.
+
+The effect function is called on a separate thread so it is non-blocking.
+
+```clojure
+(def rate-limiter (r/create "hello-service-rate-limiter"))
+
+(defn hello [person]
+  ;; hypothetical flaky, external HTTP request
+  (str "Hello " person))
+
+(def limited-hello
+  (r/decorate hello rate-limiter
+              {:effect (fn [ret person]
+                          ;; ret will have the successful return from `hello`
+                          ;; you can save it on a memory cache, disk, etc
+                          )}))
+```
+
+You can see an example of how to use effects for caching purposes at using [Resilience4clj cache as an effect][cache-effect].
 
 ## Metrics
 
